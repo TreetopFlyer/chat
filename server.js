@@ -1,59 +1,41 @@
 var net = require("net");
 var crypto = require("crypto");
-function ParseHeader(inHeaderString)
+
+var Connection = {};
+Connection.Instances = [];
+Connection.Create = function()
 {
-	var parts = inHeaderString.split("\r\n");
-	var pieces = [];
-	var i;
-	var output = {};
-	var colonIndex;
-	var key, value;
-	for(i=0; i<parts.length; i++)
-	{
-		colonIndex = parts[i].indexOf(": ");
-		if(colonIndex != -1)
-		{
-			key = parts[i].substring(0, colonIndex);
-			value = parts[i].substring(colonIndex+2);
-			output[key] = value;
-		}
-	}
-	return output;
+	var obj = {};
+	
+	Connection.Instances.push(obj);
+	
+	return obj;
 };
+
 var serverTcp = net.createServer(function(inConnection)
 {
 	inConnection.Name = "";
 	
-	
 	inConnection.HandlerDataHandshake = function(inData)
 	{
-		var parts = inData.toString().split("\r\n");
-		var pieces = [];
-		var i;
-		var header = {};
-		var colonIndex;
-		var key, value;
-		for(i=0; i<parts.length; i++)
-		{
-			colonIndex = parts[i].indexOf(": ");
-			if(colonIndex != -1)
-			{
-				key = parts[i].substring(0, colonIndex);
-				value = parts[i].substring(colonIndex+2);
-				header[key] = value;
-			}
-		}
+		//no need to parse the whole header, just pluck the Sec-WebSocket-Key value
+		var httpHeader = inData.toString();
+		var key = "Sec-WebSocket-Key: ";
+		var delimeter = "\r\n";
+		var start = httpHeader.indexOf(key) + key.length;
+		var end = httpHeader.indexOf(delimeter, start);
+		var hash = httpHeader.substring(start, end);
 		
-		SHAHasher = crypto.createHash("sha1");
-		SHAHasher.update(header["Sec-WebSocket-Key"]);
+		var SHAHasher = crypto.createHash("sha1");
+		SHAHasher.update(hash);
 		SHAHasher.update("258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
 
 		var output = "";
-		output += "HTTP/1.1 101 Switching Protocols"+"\r\n";
-		output += "Upgrade: websocket"+"\r\n";
-		output += "Connection: Upgrade"+"\r\n";
+		output += "HTTP/1.1 101 Switching Protocols\r\n";
+		output += "Upgrade: websocket\r\n";
+		output += "Connection: Upgrade\r\n";
 		output += "Sec-WebSocket-Accept: "+SHAHasher.digest("base64")+"\r\n";
-		output += ""+"\r\n";
+		output += "\r\n";
 		
 		inConnection.write(output);
 		
@@ -63,7 +45,7 @@ var serverTcp = net.createServer(function(inConnection)
 	inConnection.HandlerDataMessage = function(inData)
 	{
 		// this is for <128 character messages
-		var blitFlag = inData[1] & 0x80; // this is a flag, not the actual mask
+		var blitFlag = inData[1] & 0x80;
 		var length = inData[1] & 0x7f;
 		var blit = inData.slice(2, 6);
 		var message = inData.slice(6, 6+length);
